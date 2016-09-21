@@ -34,7 +34,7 @@ UriIO is a cloud service for redirecting to timestamp-authenticated URLs, and re
    Uriio.initialize(this);
    ```
 
-Note: you don't need to also call `Beacons.initialize()` since it's called for you.
+  Note: you don't need to also call `Beacons.initialize()` since it's called for you.
 
 3. Add your API key in your app's `strings.xml` and update your `AndroidManifest.xml` to reference it, inside the `<application>` tag:
  

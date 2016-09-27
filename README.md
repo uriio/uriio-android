@@ -24,7 +24,7 @@ UriIO is a cloud service for redirecting to timestamp-authenticated URLs, and re
    ```groovy
    dependencies {
       ...
-      compile 'com.uriio:uriio-android:1.0.1'
+      compile 'com.uriio:uriio-android:1.0.2'
    }
    ```
 
@@ -85,8 +85,8 @@ Uriio.registerUrl(url, new Callback<UrlResource>() {
                  .setAdvertiseMode(mode).setAdvertiseTxPower(txPowerLevel)
                  .setName(name)
                  .apply();
-         // Add the beacon to the store and start it
-         Beacons.add(beacon);
+         // Save the beacon and start it
+         beacon.save();
       }
       else {
          handleError(error);  // registration failed for whatever reason

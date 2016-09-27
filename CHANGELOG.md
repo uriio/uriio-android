@@ -1,3 +1,6 @@
+### 1.0.2 (September 27, 2016)
+* Dependency update
+
 ### 1.0.1 (September 24, 2016)
 * Dependency update
 

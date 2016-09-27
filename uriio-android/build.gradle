@@ -5,7 +5,7 @@ android {
     buildToolsVersion "24.0.2"
 
     defaultConfig {
-        minSdkVersion 18
+        minSdkVersion 9
         targetSdkVersion 24
         versionCode 1
         versionName "1.0"
@@ -43,8 +43,8 @@ dependencies {
     compile 'com.squareup.retrofit2:retrofit:2.1.0'
     compile 'com.squareup.retrofit2:converter-gson:2.1.0'
 
-    compile 'com.uriio:beacons-android:1.4.1'
-    //compile project(':beacons-android')
+    compile 'com.uriio:beacons-android:1.4.2'
+//    compile project(':beacons-android')
 
     testCompile 'junit:junit:4.12'
 }

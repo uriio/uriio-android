@@ -5,9 +5,10 @@ Android library for the [UriIO Ephemeral URL API](https://api.uriio.com/api)
 The library takes care of creating and refreshing Eddystone-URL beacons, when the broadcasted URL is no longer valid server-side.
 
 - [About ephemeral URLs](#ephemeral-urls)
-   * [Register a redirected URL](#registering-a-redirected-long-url)
-   * [Update destination URL](#updating-the-target-url)
-
+   * [Register a URL for redirecting](#registering-a-redirected-long-url)
+   * [Update URL target](#updating-the-target-url)
+   * [Get URL info](#getting-registered-url-info)
+   * [Delete URL](#deleting-registered-url)
 
 ### Ephemeral URLs
 
@@ -24,7 +25,7 @@ UriIO is a cloud service for redirecting to timestamp-authenticated URLs, and re
    ```groovy
    dependencies {
       ...
-      compile 'com.uriio:uriio-android:1.0.2'
+      compile 'com.uriio:uriio-android:1.0.3'
    }
    ```
 
@@ -45,21 +46,22 @@ UriIO is a cloud service for redirecting to timestamp-authenticated URLs, and re
 ### Registering a redirected long URL
 
 The snippet below registers a new "long" URL destination and creates an Ephemeral URL beacon for it.
-The `timeToLive` is in seconds; use 0 for an initially non-ephemeral URL. If non-zero,
-the UriIO server will invalidate every beacon-advertised URL after it expires using a 404.
-You can change the TTL at any time after an URL is registered
-
+The library will call the specific API for issuing periodically beacon new URLs, and restart the advertised Eddystone-URL, according to the `timeToLive` property.
+The `timeToLive` is in seconds; use 0 for an initially non-ephemeral URL.
+If the TTL is zero, the beacon's URL remains the same. If non-zero, the UriIO server will invalidate issued URLs after they expire, using a 404.
+You can change the TTL at any time after an URL is registered, since it is attached to each issued beacon URL from the moment it is created.
 
 ```java
 String url = 'https://github.com/uriio/beacons-android';
 int beaconTTL = 300;
 
-Uriio.registerUrlAndAdvertise(url, beaconTTL, new Callback<EphemeralURL>() {
+// register a URL, create a beacon, save it, and start it
+Uriio.registerUrl(url, beaconTTL, new Callback<EphemeralURL>() {
    @Override
    public void onResult(EphemeralURL beacon, Throwable error) {
       if (null != result) {
          // yey, URL registered and beacon created for it
-         // you can modify the beacon here, but it might restart if you change TTL, TX power, or mode
+         // you can modify the beacon here, but it will restart if you change TTL, TX power, or mode
          beacon.edit().setName("My first beacon").apply();
       }
       else {
@@ -69,24 +71,20 @@ Uriio.registerUrlAndAdvertise(url, beaconTTL, new Callback<EphemeralURL>() {
 });
 ```
 
-If you'd like to customize the created beacon before it first starts, then do the registration
-only, and add the beacon yourself after you modified its initial properties:
+If you'd like to modify the created beacon before it starts advertising:
 
 ```java
-String url = 'https://github.com/uriio/beacons-android';
+boolean startBeacon = false;
+boolean saveBeacon = true;
 
-Uriio.registerUrl(url, new Callback<UrlResource>() {
+Uriio.registerUrl(url, beaconTTL, startBeacon, saveBeacon, new Callback<EphemeralURL>() {
    @Override
-   public void onResult(UrlResource result, Throwable error) {
+   public void onResult(EphemeralURL beacon, Throwable error) {
       if (null != result) {
-         // URL registered! Create a beacon for it
-         EphemeralURL beacon = Uriio.createBeacon(result, beaconTimeToLive);
          beacon.edit()
-                 .setAdvertiseMode(mode).setAdvertiseTxPower(txPowerLevel)
-                 .setName(name)
+                 .setAdvertiseTxPower(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
                  .apply();
-         // Save the beacon and start it
-         beacon.save();
+         beacon.start();
       }
       else {
          handleError(error);  // registration failed for whatever reason
@@ -95,15 +93,13 @@ Uriio.registerUrl(url, new Callback<UrlResource>() {
 });
 ```
 
-The library will call the specific APIs for issuing periodically new short URLs, and recreate the Eddystone-URL beacon, according to the timeToLive property. If the TTL is zero, the beacon's URL remains the same.
-
 ### Updating the target URL
 
 To update the target URL (with or without the need to change other beacon properties), use:
 
 ```java
 // beacon is a EphemeralURL instance
-Uriio().updateUrl(beacon, url, new Callback<EphemeralURL>() {
+Uriio.updateUrl(beacon, url, new Callback<EphemeralURL>() {
    @Override
    public void onResult(EphemeralURL beacon, Throwable error) {
       if (null != result) {
@@ -116,6 +112,15 @@ Uriio().updateUrl(beacon, url, new Callback<EphemeralURL>() {
    }
 });
 ```
+
+### Getting registered URL info
+
+`Uriio.getUrl()` can be used to fetch info about a registered URL.
+
+### Deleting registered URL
+
+Call `Uriio.deleteUrl()` to remove a registered resource. You can provide either the URL resource credentials,
+or an EphemeralURL beacon, which will also be stopped and deleted after the operation completes.
 
 ### Interacting with Eddystone-URL broadcasted beacons
 

@@ -51,28 +51,52 @@ public class Uriio {
     }
 
     /**
+     * Creates an EphemeralURL beacon based on the provided URL registration result.
+     * @param urlResource         URL registration info
+     * @param beaconTimeToLive    Initial value for the beacon's TTL for issuing ephemeral short URLs.
+     * @return A new beaoon, without saving or starting it. You can adjust any other beacon properties and save it.
+     */
+    @NonNull
+    public static EphemeralURL createBeacon(UrlResource urlResource, int beaconTimeToLive) {
+        return new EphemeralURL(urlResource.getId(), urlResource.getToken(),
+                beaconTimeToLive, urlResource.getUrl(),
+                AdvertiseSettings.ADVERTISE_MODE_BALANCED,
+                AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM);
+    }
+
+    /**
      * Registers an URL resource.
      * @param url         The URL to register
      * @param callback    Callback for receiving the registration result.
      */
-    public static void registerUrl(String url, final Callback<UrlResource> callback) {
+    public static void registerUrl(String url, Callback<UrlResource> callback) {
         getAPiClient().registerUrl(url, null, callback);
     }
 
     /**
-     * Registers an URL resource, creates a beacon for it, and starts it.
+     * Registers an URL resource, creates a beacon for it, and optionally starts and saves it.
      * @param url                 The URL to register
      * @param beaconTimeToLive    Initial TTL for the issued beacon URLs.
+     * @param startBeacon         Starts the beacon.
+     * @param saveBeacon          Saves the beacon.
      * @param callback            Callback for receiving the beacon created based on the registration result.
      */
-    public static void registerUrlAndAdvertise(String url, final int beaconTimeToLive, final Callback<EphemeralURL> callback) {
-        getAPiClient().registerUrl(url, null, new Callback<UrlResource>() {
+    public static void registerUrl(String url, final int beaconTimeToLive,
+                                   final boolean startBeacon, final boolean saveBeacon,
+                                   final Callback<EphemeralURL> callback) {
+        registerUrl(url, new Callback<UrlResource>() {
             @Override
             public void onResult(UrlResource result, Throwable error) {
                 EphemeralURL beacon = null;
                 if (null != result) {
                     beacon = Uriio.createBeacon(result, beaconTimeToLive);
-                    beacon.save(true);
+
+                    if (saveBeacon) {
+                        beacon.save(startBeacon);
+                    }
+                    else if (startBeacon) {
+                        beacon.start();
+                    }
                 }
 
                 if (null != callback) {
@@ -83,17 +107,13 @@ public class Uriio {
     }
 
     /**
-     * Creates an EphemeralURL beacon based on the provided URL registration result.
-     * @param urlResource         URL registration info
-     * @param beaconTimeToLive    Initial value for the beacon's TTL for issuing ephemeral short URLs.
-     * @return A new beaoon, without saving it or starting it. You can adjust any other beacon properties and save it to storage.
+     * Registers an URL resource and creates a beacon for it, started and saved.
+     * @param url                 The URL to register
+     * @param beaconTimeToLive    Initial TTL for the issued beacon URLs.
+     * @param callback            Callback for receiving the beacon created based on the registration result.
      */
-    @NonNull
-    public static EphemeralURL createBeacon(UrlResource urlResource, int beaconTimeToLive) {
-        return new EphemeralURL(urlResource.getId(), urlResource.getToken(),
-                beaconTimeToLive, urlResource.getUrl(),
-                AdvertiseSettings.ADVERTISE_MODE_BALANCED,
-                AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM);
+    public static void registerUrl(String url, int beaconTimeToLive, Callback<EphemeralURL> callback) {
+        registerUrl(url, beaconTimeToLive, true, true, callback);
     }
 
     /**
@@ -117,8 +137,52 @@ public class Uriio {
         });
     }
 
+    /**
+     * Fetches information for a registered URL.
+     * @param urlId       Registered URL id.
+     * @param urlToken    Registered URL token.
+     * @param callback    Result callback.
+     */
+    public static void getUrl(long urlId, String urlToken, Callback<UrlResource> callback) {
+        getAPiClient().getUrl(urlId, urlToken, callback);
+    }
+
+    public static void getUrl(EphemeralURL beacon, Callback<UrlResource> callback) {
+        getUrl(beacon.getUrlId(), beacon.getUrlToken(), callback);
+    }
+
+    /**
+     * Deletes a URL resource from the server.
+     * @param urlId       Registered URL id.
+     * @param urlToken    Registered URL token.
+     * @param callback    Result callback. On success, the resource is non-null and contains the deleted date.
+     */
+    public static void deleteUrl(long urlId, String urlToken, Callback<UrlResource> callback) {
+        getAPiClient().deleteUrl(urlId, urlToken, callback);
+    }
+
+    /**
+     * Deletes a URL resource for the specified beacon. On success, it also stops and deletes the beacon.
+     * @param beacon      The beacon to unregister and eventually delete.
+     * @param callback    Result callback. On success, the resource is non-null and contains the deleted date.
+     */
+    public static void deleteUrl(final EphemeralURL beacon, final Callback<UrlResource> callback) {
+        deleteUrl(beacon.getUrlId(), beacon.getUrlToken(), new Callback<UrlResource>() {
+            @Override
+            public void onResult(UrlResource result, Throwable error) {
+                if (null != result) {
+                    beacon.delete();
+                }
+
+                if (null != callback) {
+                    callback.onResult(result, error);
+                }
+            }
+        });
+    }
+
     private static void issueShortUrl(final EphemeralURL beacon, final Callback<Boolean> callback) {
-        getAPiClient().issueShortUrls(beacon.getUrlId(), beacon.getUrlToken(), beacon.getTimeToLive(), 1,
+        getAPiClient().issueBeaconUrls(beacon.getUrlId(), beacon.getUrlToken(), beacon.getTimeToLive(), 1,
                 new Callback<ShortUrls>() {
                     @Override
                     public void onResult(ShortUrls result, Throwable error) {

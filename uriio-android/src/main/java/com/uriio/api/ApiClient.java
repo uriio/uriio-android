@@ -31,7 +31,7 @@ class ApiClient {
         Call<UrlResource> updateUrl(@Path("id") long id, @Body UrlResource urlResource);
 
         @POST("urls/{id}")
-        Call<ShortUrls> createShortUrl(@Path("id") long id, @Body IssueUrls issueUrls);
+        Call<ShortUrls> issueBeaconUrls(@Path("id") long id, @Body IssueUrls issueUrls);
 
         @GET("urls/{id}")
         Call<UrlResource> getUrl(@Path("id") long id, @Query("apiKey") String apiKey,
@@ -48,7 +48,7 @@ class ApiClient {
     private final String mApiKey;
     private final UriioService mApiService;
 
-    public static Retrofit getRetrofit() {
+    static Retrofit getRetrofit() {
         if (null == _instance) {
             _instance = new Retrofit.Builder()
                     .baseUrl(ROOT_SERVICE_URL)
@@ -58,7 +58,7 @@ class ApiClient {
         return _instance;
     }
 
-    public ApiClient(String apiKey) {
+    ApiClient(String apiKey) {
         mApiKey = apiKey;
         mApiService = getRetrofit().create(ApiClient.UriioService.class);
     }
@@ -70,7 +70,7 @@ class ApiClient {
      *                      If null, a public key will be generated using Curve25519.generateKeyPair()
      * @param callback      Result callback.
      */
-    public void registerUrl(String url, byte[] urlPublicKey, Callback<UrlResource> callback) {
+    void registerUrl(String url, byte[] urlPublicKey, Callback<UrlResource> callback) {
         if (null == urlPublicKey) {
             Curve25519KeyPair keyPair = Curve25519.getInstance(Curve25519.BEST).generateKeyPair();
             urlPublicKey = keyPair.getPublicKey();
@@ -88,14 +88,22 @@ class ApiClient {
      * @param numToIssue  How many short URLs to request.
      * @param callback    Result callback.
      */
-    public void issueShortUrls(long urlId, String urlToken, int ttl, int numToIssue,
-                               Callback<ShortUrls> callback) {
-        mApiService.createShortUrl(urlId, new IssueUrls(mApiKey, urlToken, ttl, numToIssue))
+    void issueBeaconUrls(long urlId, String urlToken, int ttl, int numToIssue,
+                         Callback<ShortUrls> callback) {
+        mApiService.issueBeaconUrls(urlId, new IssueUrls(mApiKey, urlToken, ttl, numToIssue))
                 .enqueue(new SimpleResultHandler<>(callback));
     }
 
-    public void updateUrl(long urlId, String urlToken, String longUrl, Callback<UrlResource> callback) {
+    void updateUrl(long urlId, String urlToken, String longUrl, Callback<UrlResource> callback) {
         mApiService.updateUrl(urlId, new UrlResource(mApiKey, urlToken, longUrl))
                 .enqueue(new SimpleResultHandler<>(callback));
+    }
+
+    void deleteUrl(long urlId, String urlToken, Callback<UrlResource> callback) {
+        mApiService.deleteUrl(urlId, mApiKey, urlToken).enqueue(new SimpleResultHandler<>(callback));
+    }
+
+    void getUrl(long urlId, String urlToken, Callback<UrlResource> callback) {
+        mApiService.getUrl(urlId, mApiKey, urlToken).enqueue(new SimpleResultHandler<>(callback));
     }
 }

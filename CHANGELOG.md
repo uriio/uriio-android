@@ -1,3 +1,6 @@
+### 1.0.4 (October 22, 2016)
+* Dependency updates
+
 ### 1.0.3 (September 28, 2016)
 * Added wrappers for `getUrl()` and `deleteUrl()` API calls.
 

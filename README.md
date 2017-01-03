@@ -25,7 +25,7 @@ UriIO is a cloud service for redirecting to timestamp-authenticated URLs, and re
    ```groovy
    dependencies {
       ...
-      compile 'com.uriio:uriio-android:1.0.4'
+      compile 'com.uriio:uriio-android:1.0.5'
    }
    ```
 

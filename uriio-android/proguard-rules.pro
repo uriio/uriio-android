@@ -32,3 +32,6 @@
 -keepclassmembers class * {
   @com.google.gson.annotations.SerializedName <fields>;
 }
+
+# loaded through reflection
+-keep class com.uriio.api.beacons.Store

@@ -25,7 +25,7 @@ UriIO is a cloud service for redirecting to timestamp-authenticated URLs, and re
    ```groovy
    dependencies {
       ...
-      compile 'com.uriio:uriio-android:1.0.5'
+      compile 'com.uriio:uriio-android:1.0.6'
    }
    ```
 
@@ -56,9 +56,9 @@ String url = 'https://github.com/uriio/beacons-android';
 int beaconTTL = 300;
 
 // register a URL, create a beacon, save it, and start it
-Uriio.registerUrl(url, beaconTTL, new Callback<EphemeralURL>() {
+Uriio.registerUrl(url, beaconTTL, new Callback<UriioBeacon>() {
    @Override
-   public void onResult(EphemeralURL beacon, Throwable error) {
+   public void onResult(UriioBeacon beacon, Throwable error) {
       if (null != result) {
          // yey, URL registered and beacon created for it
          // you can modify the beacon here, but it will restart if you change TTL, TX power, or mode
@@ -77,9 +77,9 @@ If you'd like to modify the created beacon before it starts advertising:
 boolean startBeacon = false;
 boolean saveBeacon = true;
 
-Uriio.registerUrl(url, beaconTTL, startBeacon, saveBeacon, new Callback<EphemeralURL>() {
+Uriio.registerUrl(url, beaconTTL, startBeacon, saveBeacon, new Callback<UriioBeacon>() {
    @Override
-   public void onResult(EphemeralURL beacon, Throwable error) {
+   public void onResult(UriioBeacon beacon, Throwable error) {
       if (null != result) {
          beacon.edit()
                  .setAdvertiseTxPower(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
@@ -98,10 +98,10 @@ Uriio.registerUrl(url, beaconTTL, startBeacon, saveBeacon, new Callback<Ephemera
 To update the target URL (with or without the need to change other beacon properties), use:
 
 ```java
-// beacon is a EphemeralURL instance
-Uriio.updateUrl(beacon, url, new Callback<EphemeralURL>() {
+// beacon is a UriioBeacon instance
+Uriio.updateUrl(beacon, url, new Callback<UriioBeacon>() {
    @Override
-   public void onResult(EphemeralURL beacon, Throwable error) {
+   public void onResult(UriioBeacon beacon, Throwable error) {
       if (null != result) {
          // target URL was updated. From now on, the server will redirect to the new URL.
          // the updated beacon is the same instance you provided
@@ -120,7 +120,7 @@ Uriio.updateUrl(beacon, url, new Callback<EphemeralURL>() {
 ### Deleting registered URL
 
 Call `Uriio.deleteUrl()` to remove a registered resource. You can provide either the URL resource credentials,
-or an EphemeralURL beacon, which will also be stopped and deleted after the operation completes.
+or an UriioBeacon beacon, which will also be stopped and deleted after the operation completes.
 
 ### Interacting with Eddystone-URL broadcasted beacons
 
@@ -130,4 +130,4 @@ of Eddystone-URL beacons, with some extra properties to allow refreshing their U
 ### Extract URL registration token
 
 You can extract the *URL identifier* and *URL token* (the details needed to edit the server resource or issue new beacon URLs),
-either after registration, or when listing `Beacons` that are instances of the subtype `EphemeralURL` class.
+either after registration, or when listing `Beacons` that are instances of the `UriioBeacon` kind.

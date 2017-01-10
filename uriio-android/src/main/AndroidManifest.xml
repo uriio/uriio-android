@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.uriio.api">
+    <!-- Need internet access to make back-end API calls -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
-    <application android:allowBackup="true" android:supportsRtl="true"/>
+    <application>
+        <!-- Registers the serializer for our custom ephemeral beacon kind -->
+        <meta-data android:name="com.uriio.ext.uriioV1" android:value="com.uriio.api.beacons.Store"/>
+    </application>
 </manifest>

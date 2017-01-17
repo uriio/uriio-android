@@ -195,7 +195,7 @@ public class Uriio {
                                     .setShortUrl(shortUrl.getUrl(), expireTime)
                                     .apply();
                         } else {
-                            beacon.setError("Update failed");
+                            beacon.setErrorDetails("Update failed");
                         }
 
                         if (null != callback) {

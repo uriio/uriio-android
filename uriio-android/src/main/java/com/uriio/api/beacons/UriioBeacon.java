@@ -5,6 +5,7 @@ import com.uriio.beacons.BuildConfig;
 import com.uriio.beacons.Callback;
 import com.uriio.beacons.Storage;
 import com.uriio.beacons.Util;
+import com.uriio.beacons.ble.Advertiser;
 import com.uriio.beacons.model.EddystoneURL;
 
 import static com.uriio.beacons.BleService.EVENT_START_FAILED;
@@ -36,40 +37,32 @@ public class UriioBeacon extends EddystoneURL {
      * @param ttl           Optional Time to Live for the ephemeral beacon URLs, in seconds.
      * @param longUrl       The destination URL. May be null if registration was done already.
      */
-    public UriioBeacon(long itemId, long urlId, String urlToken, int ttl, String longUrl,
+    public UriioBeacon(long urlId, String urlToken, int ttl, String longUrl,
                        long expireTimestamp, String shortUrl,
-                       @AdvertiseMode int advertiseMode,
-                       @AdvertiseTxPower int txPowerLevel,
+                       @Advertiser.Mode int advertiseMode,
+                       @Advertiser.Power int txPowerLevel,
                        String name) {
-        super(itemId, shortUrl, null, advertiseMode, txPowerLevel, name);
+        super(shortUrl, null, advertiseMode, txPowerLevel, name);
         init(urlId, urlToken, ttl, longUrl, expireTimestamp);
     }
 
     public UriioBeacon(long urlId, String urlToken, int ttl, String longUrl,
                        long expireTimestamp, String shortUrl,
-                       @AdvertiseMode int advertiseMode,
-                       @AdvertiseTxPower int txPowerLevel,
-                       String name) {
-        this(0, urlId, urlToken, ttl, longUrl, expireTimestamp, shortUrl, advertiseMode, txPowerLevel, name);
+                       @Advertiser.Mode int advertiseMode,
+                       @Advertiser.Power int txPowerLevel) {
+        this(urlId, urlToken, ttl, longUrl, expireTimestamp, shortUrl, advertiseMode, txPowerLevel, null);
     }
 
     public UriioBeacon(long urlId, String urlToken, int ttl, String longUrl,
-                       long expireTimestamp, String shortUrl,
-                       @AdvertiseMode int advertiseMode,
-                       @AdvertiseTxPower int txPowerLevel) {
-        this(0, urlId, urlToken, ttl, longUrl, expireTimestamp, shortUrl, advertiseMode, txPowerLevel, null);
+                       @Advertiser.Mode int advertiseMode,
+                       @Advertiser.Power int txPowerLevel, String name) {
+        this(urlId, urlToken, ttl, longUrl, 0, null, advertiseMode, txPowerLevel, name);
     }
 
     public UriioBeacon(long urlId, String urlToken, int ttl, String longUrl,
-                       @AdvertiseMode int advertiseMode,
-                       @AdvertiseTxPower int txPowerLevel, String name) {
-        this(0, urlId, urlToken, ttl, longUrl, 0, null, advertiseMode, txPowerLevel, name);
-    }
-
-    public UriioBeacon(long urlId, String urlToken, int ttl, String longUrl,
-                       @AdvertiseMode int advertiseMode,
-                       @AdvertiseTxPower int txPowerLevel) {
-        this(0, urlId, urlToken, ttl, longUrl, 0, null, advertiseMode, txPowerLevel, null);
+                       @Advertiser.Mode int advertiseMode,
+                       @Advertiser.Power int txPowerLevel) {
+        this(urlId, urlToken, ttl, longUrl, 0, null, advertiseMode, txPowerLevel, null);
     }
 
     public UriioBeacon(long urlId, String urlToken, int ttl, String longUrl, long expireTime, String shortUrl) {

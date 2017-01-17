@@ -1,3 +1,6 @@
+### 1.0.7 (January 17, 2017)
+* Build against latest beacons lib
+
 ### 1.0.6 (January 10, 2017)
 * Implement the UriIO beacon as an extension
 

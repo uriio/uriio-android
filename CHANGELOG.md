@@ -1,3 +1,8 @@
+### 2.0.0 (???)
+* Generate all advertisement URLs completely offline
+* Rotate URLs at random intervals, almost identical to EID specs
+* Remove support for obsolete API
+
 ### 1.0.7 (January 17, 2017)
 * Build against latest beacons lib
 

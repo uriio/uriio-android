@@ -1,177 +1,164 @@
 package com.uriio.api;
 
-import android.bluetooth.le.AdvertiseSettings;
 import android.content.Context;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
-import android.support.annotation.NonNull;
+import android.content.SharedPreferences;
+import android.util.Base64;
 
-import com.uriio.api.model.ShortUrl;
-import com.uriio.api.model.ShortUrls;
-import com.uriio.api.model.UrlResource;
-import com.uriio.beacons.Beacons;
+import com.uriio.api.beacons.TransientBeaconAdapter;
+import com.uriio.api.model.AccessTokenModel;
+import com.uriio.api.model.BeaconModel;
+import com.uriio.api.model.ClockModel;
+import com.uriio.api.model.NodeModel;
+import com.uriio.api.model.PageModel;
+import com.uriio.api.model.RegBeaconModel;
+import com.uriio.api.model.RegParamsModel;
+import com.uriio.api.model.TokenInfoModel;
 import com.uriio.beacons.Callback;
-import com.uriio.api.beacons.UriioBeacon;
+import com.uriio.beacons.Util;
+import com.uriio.beacons.model.TransientBeacon;
 
-import java.util.Date;
+import org.whispersystems.curve25519.Curve25519KeyPair;
 
-/**
- * UriIO API wrapper, used to register, update, and issue ephemeral URLs.
- */
+import java.lang.ref.WeakReference;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Map;
+
 public class Uriio {
-    private static ApiClient _apiClient = null;
-    private static boolean _initialized = false;
+    private static final String PREFS_FILENAME = "uriio_v2";
 
-    /**
-     * Initializes the library.
-     * @param context    Calling context
-     */
-    public static void initialize(Context context) {
-        Beacons.initialize(context);
+    private WeakReference<Context> mAppContext = null;
+    private AccessTokenModel mAccessToken = null;
 
-        if (!_initialized) {
-            _initialized = true;
-
-            // inject issuer
-            UriioBeacon.setIssuer(new UriioBeacon.ShortURLIssuer() {
-                @Override
-                public void issueBeaconUrl(UriioBeacon beacon, Callback<Boolean> callback) {
-                    issueShortUrl(beacon, callback);
-                }
-            });
-        }
+    public Uriio(Context context) {
+        mAppContext = new WeakReference<>(context.getApplicationContext());
     }
 
-    private static ApiClient getAPiClient() {
-        if (null == _apiClient) {
-            _apiClient = new ApiClient(extractApiKey(Beacons.getContext()));
+    private boolean checkAccessToken() {
+        if (null == mAccessToken) {
+            mAccessToken = new AccessTokenModel();
+            Context context = mAppContext.get();
+            SharedPreferences preferences = context.getSharedPreferences(PREFS_FILENAME, 0);
+            mAccessToken.token = preferences.getString("t", null);
+            mAccessToken.expires = preferences.getLong("e", 0);
         }
 
-        return _apiClient;
+        // if token expires in less than a few seconds don't use it. Since the client clock can be
+        // a few minutes off, the token might still be expired anyway.
+        if (null == mAccessToken.token) {
+            return false;
+        }
+
+        ApiClient.setAccessToken(mAccessToken.token);
+
+        return mAccessToken.expires > System.currentTimeMillis() / 1000 + 5;
     }
 
-    /**
-     * Creates an UriioBeacon beacon based on the provided URL registration result.
-     * @param urlResource         URL registration info
-     * @param beaconTimeToLive    Initial value for the beacon's TTL for issuing ephemeral short URLs.
-     * @return A new beaoon, without saving or starting it. You can adjust any other beacon properties and save it.
-     */
-    @NonNull
-    public static UriioBeacon createBeacon(UrlResource urlResource, int beaconTimeToLive) {
-        return new UriioBeacon(urlResource.getId(), urlResource.getToken(),
-                beaconTimeToLive, urlResource.getUrl(),
-                AdvertiseSettings.ADVERTISE_MODE_BALANCED,
-                AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM);
+    public void clearAccessToken() {
+        Context context = mAppContext.get();
+        if (null != context) {
+            context.getSharedPreferences(PREFS_FILENAME, 0).edit().clear().apply();
+        }
+        mAccessToken = null;
+        ApiClient.setAccessToken(null);
     }
 
-    /**
-     * Registers an URL resource.
-     * @param url         The URL to register
-     * @param callback    Callback for receiving the registration result.
-     */
-    public static void registerUrl(String url, Callback<UrlResource> callback) {
-        getAPiClient().registerUrl(url, null, callback);
-    }
-
-    /**
-     * Registers an URL resource, creates a beacon for it, and optionally starts and saves it.
-     * @param url                 The URL to register
-     * @param beaconTimeToLive    Initial TTL for the issued beacon URLs.
-     * @param startBeacon         Starts the beacon.
-     * @param saveBeacon          Saves the beacon.
-     * @param callback            Callback for receiving the beacon created based on the registration result.
-     */
-    public static void registerUrl(String url, final int beaconTimeToLive,
-                                   final boolean startBeacon, final boolean saveBeacon,
-                                   final Callback<UriioBeacon> callback) {
-        registerUrl(url, new Callback<UrlResource>() {
+    public void authenticate(String firebaseIdToken, final Callback<AccessTokenModel> callback) {
+        ApiClient.authenticate(firebaseIdToken, new Callback<AccessTokenModel>() {
             @Override
-            public void onResult(UrlResource result, Throwable error) {
-                UriioBeacon beacon = null;
+            public void onResult(AccessTokenModel result, Throwable error) {
                 if (null != result) {
-                    beacon = Uriio.createBeacon(result, beaconTimeToLive);
+                    mAccessToken = result;
+                    mAccessToken.expires = System.currentTimeMillis() + 1000 * mAccessToken.expires;
+                    ApiClient.setAccessToken(mAccessToken.token);
 
-                    if (saveBeacon) {
-                        beacon.save(startBeacon);
-                    }
-                    else if (startBeacon) {
-                        beacon.start();
+                    Context context = mAppContext.get();
+                    if (null != context) {
+                        SharedPreferences preferences = context.getSharedPreferences(PREFS_FILENAME, 0);
+                        preferences.edit()
+                                .putString("t", result.token)
+                                .putLong("e", result.expires)
+                                .apply();
                     }
                 }
-
-                if (null != callback) {
-                    callback.onResult(beacon, error);
-                }
+                callback.onResult(result, error);
             }
         });
     }
 
-    /**
-     * Registers an URL resource and creates a beacon for it, started and saved.
-     * @param url                 The URL to register
-     * @param beaconTimeToLive    Initial TTL for the issued beacon URLs.
-     * @param callback            Callback for receiving the beacon created based on the registration result.
-     */
-    public static void registerUrl(String url, int beaconTimeToLive, Callback<UriioBeacon> callback) {
-        registerUrl(url, beaconTimeToLive, true, true, callback);
-    }
+    public void registerBeacon(final int rotationExponent, final Callback<TransientBeacon> callback) {
+        if (!checkAccessToken()) {
+            callback.onResult(null, new ApiException(401, "Access token expired"));
+            return;
+        }
 
-    /**
-     * Modifies the target URL.
-     * @param beacon      The beacon containing URL registration info.
-     * @param url         New target URL to be redirected to.
-     * @param callback    Callback for being notified when the operation finishes and the new info is saved.
-     */
-    public static void updateUrl(final UriioBeacon beacon, String url, final Callback<UriioBeacon> callback) {
-        getAPiClient().updateUrl(beacon.getUrlId(), beacon.getUrlToken(), url, new Callback<UrlResource>() {
+        ApiClient.getRegistrationParams(new Callback<RegParamsModel>() {
             @Override
-            public void onResult(UrlResource result, Throwable error) {
-                if (null != result) {
-                    beacon.edit().setLongUrl(result.getUrl()).apply();
+            public void onResult(RegParamsModel result, Throwable error) {
+                if (null != error) {
+                    callback.onResult(null, error);
+                    return;
                 }
 
-                if (null != callback) {
-                    callback.onResult(beacon, error);
-                }
+                handleRegistrationParamsResult((byte) rotationExponent, result, callback);
             }
         });
     }
 
-    /**
-     * Fetches information for a registered URL.
-     * @param urlId       Registered URL id.
-     * @param urlToken    Registered URL token.
-     * @param callback    Result callback.
-     */
-    public static void getUrl(long urlId, String urlToken, Callback<UrlResource> callback) {
-        getAPiClient().getUrl(urlId, urlToken, callback);
-    }
+    private void handleRegistrationParamsResult(byte rotationExponent, RegParamsModel result, final Callback<TransientBeacon> callback) {
+        byte[] servicePublicKey = Base64.decode(result.serviceEcdhPublicKey, Base64.DEFAULT);
 
-    public static void getUrl(UriioBeacon beacon, Callback<UrlResource> callback) {
-        getUrl(beacon.getUrlId(), beacon.getUrlToken(), callback);
-    }
+        byte[] sharedSecret;
+        Curve25519KeyPair beaconKeyPair;
+        for(;;) {
+            beaconKeyPair = Crypto.generateKeyPair();
+            sharedSecret = Crypto.computeSharedSecret(servicePublicKey, beaconKeyPair.getPrivateKey());
+            if (!Util.isZeroBuffer(sharedSecret)) {
+                break;
+            }
+        }
 
-    /**
-     * Deletes a URL resource from the server.
-     * @param urlId       Registered URL id.
-     * @param urlToken    Registered URL token.
-     * @param callback    Result callback. On success, the resource is non-null and contains the deleted date.
-     */
-    public static void deleteUrl(long urlId, String urlToken, Callback<UrlResource> callback) {
-        getAPiClient().deleteUrl(urlId, urlToken, callback);
-    }
+        byte[] identityKey;
+        try {
+            identityKey = Crypto.computeIdentityKey(sharedSecret, servicePublicKey, beaconKeyPair.getPublicKey());
+        } catch (InvalidKeyException | NoSuchAlgorithmException e) {
+            callback.onResult(null, e);
+            return;
+        }
 
-    /**
-     * Deletes a URL resource for the specified beacon. On success, it also stops and deletes the beacon.
-     * @param beacon      The beacon to unregister and eventually delete.
-     * @param callback    Result callback. On success, the resource is non-null and contains the deleted date.
-     */
-    public static void deleteUrl(final UriioBeacon beacon, final Callback<UrlResource> callback) {
-        deleteUrl(beacon.getUrlId(), beacon.getUrlToken(), new Callback<UrlResource>() {
+        final TransientBeacon beacon = TransientBeaconAdapter.createBeacon(identityKey, rotationExponent, 0, null);
+        beacon.save(false);
+
+        int initialClockValue = 0;
+        RegBeaconModel regBeaconModel = new RegBeaconModel();
+        regBeaconModel.beaconEcdhPublicKey = Base64.encodeToString(beaconKeyPair.getPublicKey(), Base64.NO_PADDING | Base64.NO_WRAP);
+        regBeaconModel.serviceEcdhPublicKey = result.serviceEcdhPublicKey;
+        regBeaconModel.initialClock = initialClockValue;
+        regBeaconModel.rotationPeriodExponent = rotationExponent;
+        regBeaconModel.initialEid = beacon.computeTransientToken(initialClockValue);
+
+        ApiClient.registerBeacon(regBeaconModel, new Callback<BeaconModel>() {
             @Override
-            public void onResult(UrlResource result, Throwable error) {
+            public void onResult(BeaconModel result, Throwable error) {
                 if (null != result) {
+                    beacon.edit().setEpochAndId(result.epoch / 1000, result.id).apply();
+                    beacon.start();
+                    callback.onResult(beacon, null);
+                }
+                else {
                     beacon.delete();
+                    callback.onResult(null, error);
+                }
+            }
+        });
+    }
+
+    public void getServerTime(final Callback<ClockModel> callback) {
+        ApiClient.getServerTime(new Callback<ClockModel>() {
+            @Override
+            public void onResult(ClockModel result, Throwable error) {
+                if (null != result) {
+                    TransientBeacon.applyServerTime(result.currentTimeMs);
                 }
 
                 if (null != callback) {
@@ -181,49 +168,57 @@ public class Uriio {
         });
     }
 
-    private static void issueShortUrl(final UriioBeacon beacon, final Callback<Boolean> callback) {
-        getAPiClient().issueBeaconUrls(beacon.getUrlId(), beacon.getUrlToken(), beacon.getTimeToLive(), 1,
-                new Callback<ShortUrls>() {
-                    @Override
-                    public void onResult(ShortUrls result, Throwable error) {
-                        if (null != result) {
-                            ShortUrl shortUrl = result.getItems()[0];
-                            Date expireDate = shortUrl.getExpire();
-                            long expireTime = null == expireDate ? 0 : expireDate.getTime();
+    public void checkBeaconToken(String token, Callback<TokenInfoModel> callback) {
+        if (!checkAccessToken()) {
+            callback.onResult(null, new ApiException(401, "Access token expired"));
+            return;
+        }
 
-                            beacon.edit()
-                                    .setShortUrl(shortUrl.getUrl(), expireTime)
-                                    .apply();
-                        } else {
-                            beacon.setErrorDetails("Update failed");
-                        }
-
-                        if (null != callback) {
-                            callback.onResult(null != result, error);
-                        }
-                    }
-                });
+        ApiClient.checkToken(token, callback);
     }
 
-    private static String extractApiKey(Context context) {
-        ApplicationInfo appInfo;
-        try {
-            appInfo = context.getPackageManager().getApplicationInfo(context.getPackageName(), PackageManager.GET_META_DATA);
-        } catch (PackageManager.NameNotFoundException e) {
-            throw new IllegalArgumentException("App package not found");
+    public void getBeacon(String id, Callback<BeaconModel> callback) {
+        if (!checkAccessToken()) {
+            callback.onResult(null, new ApiException(401, "Access token expired"));
+            return;
         }
 
-        String apiKey = null;
-        // metadata is null when no entries exist
-        if (null != appInfo && null != appInfo.metaData) {
-            apiKey = appInfo.metaData.getString("com.uriio.apiKey");
+        ApiClient.getBeacon(id, callback);
+    }
+
+    public void getNode(String id, Callback<NodeModel> callback) {
+        if (!checkAccessToken()) {
+            callback.onResult(null, new ApiException(401, "Access token expired"));
+            return;
         }
 
-        if (null == apiKey) {
-            // fatal error - no api key defined in the client app
-            throw new IllegalArgumentException("Missing com.uriio.apiKey meta-data in manifest");
+        ApiClient.getNode(id, callback);
+    }
+
+    public void listNodes(int limit, String pageToken, Callback<PageModel<NodeModel>> callback) {
+        if (!checkAccessToken()) {
+            callback.onResult(null, new ApiException(401, "Access token expired"));
+            return;
         }
 
-        return apiKey;
+        ApiClient.listNodes(limit, pageToken, callback);
+    }
+
+    public void insertNode(NodeModel node, Callback<NodeModel> callback) {
+        if (!checkAccessToken()) {
+            callback.onResult(null, new ApiException(401, "Access token expired"));
+            return;
+        }
+
+        ApiClient.insertNode(node, callback);
+    }
+
+    public void updateBeacon(String id, Map<String, Object> params, Callback<BeaconModel> callback) {
+        if (!checkAccessToken()) {
+            callback.onResult(null, new ApiException(401, "Access token expired"));
+            return;
+        }
+
+        ApiClient.updateBeacon(id, params, callback);
     }
 }

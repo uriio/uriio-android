@@ -1,19 +1,35 @@
 package com.uriio.api;
 
-import com.uriio.api.model.IssueUrls;
-import com.uriio.api.model.ShortUrls;
-import com.uriio.api.model.UrlResource;
+import android.os.Build;
+
+import com.uriio.api.model.AccessTokenModel;
+import com.uriio.api.model.AuthModel;
+import com.uriio.api.model.BeaconModel;
+import com.uriio.api.model.ClockModel;
+import com.uriio.api.model.NodeModel;
+import com.uriio.api.model.PageModel;
+import com.uriio.api.model.RegBeaconModel;
+import com.uriio.api.model.RegParamsModel;
+import com.uriio.api.model.TokenInfoModel;
 import com.uriio.beacons.Callback;
 
-import org.whispersystems.curve25519.Curve25519;
-import org.whispersystems.curve25519.Curve25519KeyPair;
+import org.json.JSONObject;
 
+import java.io.IOException;
+import java.util.Map;
+
+import okhttp3.Interceptor;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import retrofit2.Call;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 import retrofit2.http.Body;
-import retrofit2.http.DELETE;
 import retrofit2.http.GET;
+import retrofit2.http.Header;
 import retrofit2.http.POST;
 import retrofit2.http.PUT;
 import retrofit2.http.Path;
@@ -23,87 +39,149 @@ import retrofit2.http.Query;
  * REST API wrapper.
  */
 class ApiClient {
-    private interface UriioService {
-        @POST("urls")
-        Call<UrlResource> registerUrl(@Body UrlResource urlResource);
+    private static final String ROOT_SERVICE_URL = "https://api.uriio.com/v2/";
 
-        @PUT("urls/{id}")
-        Call<UrlResource> updateUrl(@Path("id") long id, @Body UrlResource urlResource);
+    private static Retrofit _retrofit;
+    private static ApiClient _apiClient = null;
 
-        @POST("urls/{id}")
-        Call<ShortUrls> issueBeaconUrls(@Path("id") long id, @Body IssueUrls issueUrls);
+    private interface ApiService {
+        @POST("auth")
+        Call<AccessTokenModel> authenticate(@Body AuthModel auth);
 
-        @GET("urls/{id}")
-        Call<UrlResource> getUrl(@Path("id") long id, @Query("apiKey") String apiKey,
-                                 @Query("token") String token);
+        @GET("clock")
+        Call<ClockModel> getServerClock();
 
-        @DELETE("urls/{id}")
-        Call<UrlResource> deleteUrl(@Path("id") long id, @Query("apiKey") String apiKey,
-                                    @Query("token") String token);
+        @GET("params")
+        Call<RegParamsModel> getParams(@Header("Authorization") String auth);
+
+        @POST("beacons")
+        Call<BeaconModel> registerBeacon(@Header("Authorization") String auth,
+                                         @Body RegBeaconModel beaconRegistration);
+
+        @GET("beacons/{id}")
+        Call<BeaconModel> getBeacon(@Header("Authorization") String auth, @Path("id") String id);
+
+        @PUT("beacons/{id}")
+        Call<BeaconModel> updateBeacon(@Header("Authorization") String auth, @Path("id") String id,
+                                       @Body RequestBody params);
+
+        @GET("eid/{id}")
+        Call<TokenInfoModel> checkToken(@Header("Authorization") String auth, @Path("id") String id);
+
+        @GET("nodes")
+        Call<PageModel<NodeModel>> listNodes(@Header("Authorization") String auth,
+                                             @Query("page") String pageToken,
+                                             @Query("limit") int limit);
+
+        @POST("nodes")
+        Call<NodeModel> insertNode(@Header("Authorization") String auth, @Body NodeModel node);
+
+        @GET("nodes/{id}")
+        Call<NodeModel> getNode(@Header("Authorization") String auth, @Path("id") String id);
     }
 
-    private static final String ROOT_SERVICE_URL = "https://api.uriio.com/v1/";
+    private final ApiService mApiService;
+    private String mAuthHeader = null;
 
-    private static Retrofit _instance;
-    private final String mApiKey;
-    private final UriioService mApiService;
+    private static ApiClient getInstance() {
+        if (null == _apiClient) {
+            _apiClient = new ApiClient();
+        }
+
+        return _apiClient;
+    }
+
+    private ApiClient() {
+        mApiService = getRetrofit().create(ApiService.class);
+    }
+
+    private static ApiService getService() {
+        return getInstance().mApiService;
+    }
 
     static Retrofit getRetrofit() {
-        if (null == _instance) {
-            _instance = new Retrofit.Builder()
+        if (null == _retrofit) {
+            OkHttpClient.Builder httpClient = new OkHttpClient.Builder();
+            httpClient.addInterceptor(new Interceptor() {
+                private String userAgent = String.format("BeaconToy/37 (Android %s; %s)",
+                        Build.VERSION.RELEASE, Build.MODEL);
+
+                @Override
+                public Response intercept(Interceptor.Chain chain) throws IOException {
+                    Request original = chain.request();
+
+                    Request request = original.newBuilder()
+                            .header("User-Agent", userAgent)
+                            .method(original.method(), original.body())
+                            .build();
+
+                    return chain.proceed(request);
+                }
+            });
+
+            _retrofit = new Retrofit.Builder()
                     .baseUrl(ROOT_SERVICE_URL)
                     .addConverterFactory(GsonConverterFactory.create())
+                    .client(httpClient.build())
                     .build();
         }
-        return _instance;
+        return _retrofit;
     }
 
-    ApiClient(String apiKey) {
-        mApiKey = apiKey;
-        mApiService = getRetrofit().create(ApiClient.UriioService.class);
+    static void setAccessToken(String accessToken) {
+        getInstance().mAuthHeader = null == accessToken ? null : String.format("Bearer %s", accessToken);
     }
 
-    /**
-     * Registers a new long URL resource.
-     * @param url           The long URL.
-     * @param urlPublicKey  The public key of the new URL. Each URL should have its own key-pair.
-     *                      If null, a public key will be generated using Curve25519.generateKeyPair()
-     * @param callback      Result callback.
-     */
-    void registerUrl(String url, byte[] urlPublicKey, Callback<UrlResource> callback) {
-        if (null == urlPublicKey) {
-            Curve25519KeyPair keyPair = Curve25519.getInstance(Curve25519.BEST).generateKeyPair();
-            urlPublicKey = keyPair.getPublicKey();
-        }
-
-        mApiService.registerUrl(new UrlResource(mApiKey, url, urlPublicKey))
-                .enqueue(new SimpleResultHandler<>(callback));
+    private static <T> Call<T> enqueue(Call<T> call, Callback<T> callback) {
+        call.enqueue(new SimpleResultHandler<>(callback));
+        return call;
     }
 
-    /**
-     * Requests a new short URL for the specified resource.
-     * @param urlId       The registered URL's ID.
-     * @param urlToken    The URL token.
-     * @param ttl         Time To Live for the returned short URL (or 0 to never expire).
-     * @param numToIssue  How many short URLs to request.
-     * @param callback    Result callback.
-     */
-    void issueBeaconUrls(long urlId, String urlToken, int ttl, int numToIssue,
-                         Callback<ShortUrls> callback) {
-        mApiService.issueBeaconUrls(urlId, new IssueUrls(mApiKey, urlToken, ttl, numToIssue))
-                .enqueue(new SimpleResultHandler<>(callback));
+    static Call<AccessTokenModel> authenticate(String firebaseIdToken,
+                                               Callback<AccessTokenModel> callback) {
+        AuthModel auth = new AuthModel();
+        auth.firebaseIdToken = firebaseIdToken;
+
+        return enqueue(getService().authenticate(auth), callback);
     }
 
-    void updateUrl(long urlId, String urlToken, String longUrl, Callback<UrlResource> callback) {
-        mApiService.updateUrl(urlId, new UrlResource(mApiKey, urlToken, longUrl))
-                .enqueue(new SimpleResultHandler<>(callback));
+    static Call<ClockModel> getServerTime(Callback<ClockModel> callback) {
+        return enqueue(getService().getServerClock(), callback);
     }
 
-    void deleteUrl(long urlId, String urlToken, Callback<UrlResource> callback) {
-        mApiService.deleteUrl(urlId, mApiKey, urlToken).enqueue(new SimpleResultHandler<>(callback));
+    static Call<RegParamsModel> getRegistrationParams(Callback<RegParamsModel> callback) {
+        return enqueue(getService().getParams(getInstance().mAuthHeader), callback);
     }
 
-    void getUrl(long urlId, String urlToken, Callback<UrlResource> callback) {
-        mApiService.getUrl(urlId, mApiKey, urlToken).enqueue(new SimpleResultHandler<>(callback));
+    static Call<BeaconModel> registerBeacon(RegBeaconModel body, Callback<BeaconModel> callback) {
+        return enqueue(getService().registerBeacon(getInstance().mAuthHeader, body), callback);
+    }
+
+    static Call<TokenInfoModel> checkToken(String id, Callback<TokenInfoModel> callback) {
+        return enqueue(getService().checkToken(getInstance().mAuthHeader, id), callback);
+    }
+
+    static Call<BeaconModel> getBeacon(String id, Callback<BeaconModel> callback) {
+        return enqueue(getService().getBeacon(getInstance().mAuthHeader, id), callback);
+    }
+
+    static Call<BeaconModel> updateBeacon(String id, Map<String, Object> params,
+                                          Callback<BeaconModel> callback) {
+        return enqueue(getService().updateBeacon(getInstance().mAuthHeader, id,
+                RequestBody.create(MediaType.parse("application/json; charset=utf-8"),
+                        new JSONObject(params).toString())), callback);
+    }
+
+    static Call<NodeModel> getNode(String id, Callback<NodeModel> callback) {
+        return enqueue(getService().getNode(getInstance().mAuthHeader, id), callback);
+    }
+
+    static Call<PageModel<NodeModel>> listNodes(int limit, String pageToken,
+                                                Callback<PageModel<NodeModel>> callback) {
+        return enqueue(getService().listNodes(getInstance().mAuthHeader, pageToken, limit), callback);
+    }
+
+    static Call<NodeModel> insertNode(NodeModel node, Callback<NodeModel> callback) {
+        return enqueue(getService().insertNode(getInstance().mAuthHeader, node), callback);
     }
 }

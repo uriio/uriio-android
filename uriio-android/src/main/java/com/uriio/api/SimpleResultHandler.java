@@ -1,6 +1,7 @@
 package com.uriio.api;
 
 import com.google.gson.JsonParseException;
+import com.uriio.api.model.Error;
 import com.uriio.api.model.ErrorHolder;
 import com.uriio.beacons.Callback;
 
@@ -26,7 +27,7 @@ public class SimpleResultHandler<T> implements retrofit2.Callback<T> {
         if (response.isSuccessful()) {
             callback.onResult(response.body(), null);
         } else {
-            callback.onResult(null, new Exception(extractError(response)));
+            callback.onResult(null, extractError(response));
         }
     }
 
@@ -35,18 +36,25 @@ public class SimpleResultHandler<T> implements retrofit2.Callback<T> {
         callback.onResult(null, t);
     }
 
-    private static String extractError(Response response) {
-        String error = "Unknown error";
+    private static Throwable extractError(Response response) {
+        Throwable throwable;
+        int statusCode = response.code();
+
         if (response.errorBody() != null) {
             try {
                 ErrorHolder errorModel = (ErrorHolder) ApiClient.getRetrofit()
                         .responseBodyConverter(ErrorHolder.class, new Annotation[0])
                         .convert(response.errorBody());
-                error = errorModel.getError().message;
-            } catch (IOException | JsonParseException ignored) {
+                Error errorDetails = errorModel.getError();
+                String error = null != errorDetails ? errorDetails.message : null;
+                throwable = new ApiException(statusCode, error);
+            } catch (IOException | JsonParseException e) {
                 // http error 5xx or non-json content
+                throwable = e;
             }
         }
-        return error;
+        else throwable = new ApiException(statusCode, "Invalid response");
+
+        return throwable;
     }
 }

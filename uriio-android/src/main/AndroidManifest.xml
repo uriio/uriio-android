@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <application>
-        <!-- Registers the serializer for our custom ephemeral beacon kind -->
-        <meta-data android:name="com.uriio.ext.uriioV1" android:value="com.uriio.api.beacons.Store"/>
+        <!-- Register our custom beacon kind -->
+        <meta-data android:name="com.uriio.ext.uriioV2" android:value="com.uriio.api.beacons.TransientBeaconAdapter"/>
     </application>
 </manifest>

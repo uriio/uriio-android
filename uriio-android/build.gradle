@@ -1,14 +1,14 @@
 apply plugin: 'com.android.library'
 
-def PUBLISH_VERSION = '1.0.7'
+def PUBLISH_VERSION = '2.0.0'
 
 android {
-    compileSdkVersion 25
-    buildToolsVersion "25.0.2"
+    compileSdkVersion 27
+    buildToolsVersion "27.0.3"
 
     defaultConfig {
-        minSdkVersion 9
-        targetSdkVersion 25
+        minSdkVersion 14
+        targetSdkVersion 27
         versionName PUBLISH_VERSION
         // versionCode not relevant for library projects
         // versionCode 1
@@ -41,15 +41,18 @@ android {
 }
 
 dependencies {
-    compile fileTree(dir: 'libs', include: ['*.jar'])
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
 
-    compile 'com.squareup.retrofit2:retrofit:2.1.0'
-    compile 'com.squareup.retrofit2:converter-gson:2.1.0'
+    implementation 'com.squareup.retrofit2:retrofit:2.1.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.1.0'
 
-    compile 'com.uriio:beacons-android:1.5.1'
-//    compile project(':beacons-android')
+//    implementation 'com.uriio:beacons-android:1.5.2'
+    implementation project(':beacons-android')
 
-    testCompile 'junit:junit:4.12'
+    // https://github.com/WhisperSystems/curve25519-java
+    implementation 'org.whispersystems:curve25519-android:0.4.1'
+
+    testImplementation 'junit:junit:4.12'
 }
 
 if (project.hasProperty('ossrhUsername')) apply from: 'deploy.gradle'
